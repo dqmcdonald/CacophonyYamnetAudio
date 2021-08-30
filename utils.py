@@ -30,6 +30,7 @@ import pydub
 from scipy import signal
 import pandas as pd
 
+BIRDS_CLASSES = np.array([93,93,95,96,97,98,99,100,101,102,106,107,108,109,110,111,113,114,115])
 
 def load_model_and_class_names():
     """
@@ -51,7 +52,8 @@ def load_model_and_class_names():
     
     return (model,class_names)
 
-def load_audio_16k_mono(filename, out_sample_rate=16000):
+def load_audio_16k_mono(filename, out_sample_rate=16000,
+                        start_time = 0, end_time=40):
     """ Load an audio file in WAV or MP3 format based on the suffix,
     convert it to a float tensor, resample to 16 kHz single-channel audio. """
     
@@ -78,7 +80,7 @@ def load_audio_16k_mono(filename, out_sample_rate=16000):
         raise ValueError
     sample_rate = tf.cast(sample_rate, dtype=tf.int64)
     wav = tfio.audio.resample(wav, rate_in=sample_rate, rate_out=out_sample_rate)
-    return wav[:out_sample_rate*40]  # Only return the first 40 seconds of the data file as the rest is blank
+    return wav[out_sample_rate*start_time:out_sample_rate*end_time]  
 
 
 
