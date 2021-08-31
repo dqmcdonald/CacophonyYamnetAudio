@@ -37,7 +37,7 @@ def load_model_and_class_names():
     Use tensorflow_hub to load the pre-trained model and a list of all the 521 class names:
     """
     # Load the model.
-    model = hub.load('https://tfhub.dev/google/yamnet/1')
+    model = hub.load("./yamnet_1/")
 
     # Find the name of the class with the top score when mean-aggregated across frames.
     def class_names_from_csv(class_map_csv_text):
