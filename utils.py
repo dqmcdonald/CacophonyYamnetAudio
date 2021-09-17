@@ -52,34 +52,54 @@ def load_model_and_class_names():
     
     return (model,class_names)
 
-def load_audio_16k_mono(filename, out_sample_rate=16000,
-                        start_time = 0, end_time=40):
-    """ Load an audio file in WAV or MP3 format based on the suffix,
-    convert it to a float tensor, resample to 16 kHz single-channel audio. """
-    
-    try:
-        suffix = os.path.splitext(filename)[1]
-    except:
-        "Unknown file suffix for {}".format(filename)
-    suffix = suffix.lower()
-    if suffix == '.wav':
-        file_contents = tf.io.read_file(filename)
-        wav, sample_rate = tf.audio.decode_wav(
-          file_contents,
-          desired_channels=1)
-        wav = tf.squeeze(wav, axis=-1)
-    elif suffix == '.mp3':
-        a = pydub.AudioSegment.from_mp3(filename)
-        wav = np.array(a.get_array_of_samples(), dtype='float32')
-        wav = np.float32(wav) / 2**15
-        if a.channels == 2:
-            wav = wav.reshape((-1, 2))
-        sample_rate = a.frame_rate
+def load_audio_16k_mono(filename, out_sample_rate=16000, target_db = -20,
+                        start_time = 0, end_time=40, stream = None,
+                        stream_type = "mp4"):
+    """ Load an audio file in WAV or MP3/MP4 format based on the suffix,
+    convert it to a float tensor, resample to 16 kHz single-channel audio. 
+
+    Sound files will be standardized to have average amplitude of target_db
+
+    Start and end times are in seconds
+
+    if stream is not None then it's treated as a readable object (an open file
+    or a BytesIO stream). In this case the type is specified by "stream_type"
+
+    """
+
+    if stream is not None:
+        a = pydub.AudioSegment.from_file(stream, stream_type)
+        
     else:
-        print("Unknown file type: {}".format(filename))
-        raise ValueError
-    sample_rate = tf.cast(sample_rate, dtype=tf.int64)
-    wav = tfio.audio.resample(wav, rate_in=sample_rate, rate_out=out_sample_rate)
+    
+        try:
+            suffix = os.path.splitext(filename)[1]
+        except:
+            "Unknown file suffix for {}".format(filename)
+        suffix = suffix.lower()
+        if suffix == '.wav':
+            file_type = "wav"
+        elif suffix == '.mp3':
+            file_type = "mp3"
+        elif suffix == '.mp4':
+            file_type = "mp4"
+        else:
+            print("Unknown file type: {}".format(filename))
+            raise ValueError
+
+        a = pydub.AudioSegment.from_file(filename, file_type)
+
+
+    # Resample to frame rate:
+    a = a.set_frame_rate(out_sample_rate)
+    # Normalize volume:
+    gain_change = target_db - a.dBFS
+    a = a.apply_gain(gain_change)
+
+    wav = np.array(a.get_array_of_samples(), dtype='float32')
+    wav = np.float32(wav) / 2**15
+    if a.channels == 2:
+        wav = wav.reshape((-1, 2))
     return wav[out_sample_rate*start_time:out_sample_rate*end_time]  
 
 
@@ -133,3 +153,4 @@ def read_cacophony_indices(directory):
                 cacophony_indices.append((float(cis[0])+float(cis[1]))/2.0)
     
     return cacophony_indices
+
