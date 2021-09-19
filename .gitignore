@@ -3,3 +3,6 @@ larger_datasets
 korimako_data
 private.py
 TempExperiments.ipynb
+*.txt
+scores.db
+logs
