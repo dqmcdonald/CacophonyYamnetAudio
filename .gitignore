@@ -6,3 +6,4 @@ TempExperiments.ipynb
 *.txt
 scores.db
 logs
+*.db

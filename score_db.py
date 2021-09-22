@@ -106,7 +106,11 @@ def parse_arguments():
         default = DEFAULT_TOP_K_CLASS,
         help="Top N for class score to be counted as bird" )
     
-                                              
+    parser.add_argument(
+        "--pos-only",
+        type=bool,
+        default = False,
+        help="Only update the position (lat/long) for existing records" )                                   
 
     args = parser.parse_args()
     
@@ -140,7 +144,9 @@ def create_sql_table(con):
                  dev_id INT,
                  thresh_score REAL,
                  class_score REAL,
-                 ci_score REAL) ''')
+                 ci_score REAL,
+                 latitude REAL,
+                 longtitude REAL) ''')
 
     
     
@@ -196,7 +202,32 @@ def extract_mean_ci_score(rec):
             
     return ci
 
+ 
+def get_lat_long(rec):
+    """
     
+
+    Parameters
+    ----------
+    rec : dict
+        Audio recording record.
+
+    Returns
+    -------
+    Tuple of (latitude,longtidue) as floats.
+    Return (None,None) is error or missing
+
+    """
+   
+    try:
+        lat = rec["location"]["coordinates"][0]
+        long = rec["location"]["coordinates"][1]
+    except KeyError:
+        return (None,None)
+    
+    return (lat,long)
+
+
 
 def insert_scores_into_db(con,scores, ci, rec):
     """
@@ -224,15 +255,25 @@ def insert_scores_into_db(con,scores, ci, rec):
     dev_name = dev['devicename']
     dt = parsedate(rec["recordingDateTime"])
     dt = dt.astimezone(local_tz)
-    
+    (lat,long) = get_lat_long(rec)
     cur = con.cursor()
-    cur.execute("INSERT into scores VALUES ( ?,?,?,?,?,?,?)",( rec_id, dt,
+    if lat is None or long is None:
+
+        cur.execute("INSERT into scores VALUES ( ?,?,?,?,?,?,?)",( rec_id, dt,
                 dev_name,dev_id, scores[1], scores[0], ci ))
         
-     
-    print("        Dev name: {:30s} Time = {}".format(dev_name, dt.strftime("%d-%h-%Y %H:%M:%S")))
-    print("        Thresh = {:4.2f} Class = {:4.2f} CI = {:4.2f}".format(scores[1],scores[0],ci),flush=True  )                                                    
-                                                                   
+        print("        Dev name: {:30s} Time = {}".format(dev_name, dt.strftime("%d-%h-%Y %H:%M:%S")))
+        print("        Thresh = {:4.2f} Class = {:4.2f} CI = {:4.2f}".format(scores[1],scores[0],ci)) 
+        print("        No position (lat/long) data",flush=True  )                                                     
+    
+    else:  
+        cur.execute("INSERT into scores VALUES ( ?,?,?,?,?,?,?,?,?)",( rec_id, dt,
+                dev_name,dev_id, scores[1], scores[0], ci,lat,long ))
+        
+        print("        Dev name: {:30s} Time = {}".format(dev_name, dt.strftime("%d-%h-%Y %H:%M:%S")))
+        print("        Thresh = {:4.2f} Class = {:4.2f} CI = {:4.2f}".format(scores[1],scores[0],ci)) 
+        print("        Lat.   = {:4.2f} Long. = {:4.2f}".format(lat,long),flush=True  ) 
+                                                                     
         
 def score_recordings(recordings,args,con,model, client):
     """
@@ -294,10 +335,45 @@ def score_recordings(recordings,args,con,model, client):
                 
     
     
+def update_position(recordings, con):
+    """
+
+    Update the latitude and longtitude records in the database ponted to by con
+    based on those in "recordings"
+    
+    Parameters
+    ----------
+
+    recordings : list of dict
+        Audio recording records.
+
+    con : SQLite connection
+        connection to open SQLite database.
+        
+    Returns
+    -------
+    None.
+
+    """
+    
+    for rec in recordings:
+        rec_id = rec['id']
+        print("       Updating recording {:6d} ".format(rec_id))         
+        if recording_in_db(rec_id, con):
+            (lat, long) = get_lat_long(rec)
+            if lat is None or long is None:
+                print("         Record {} has no position data".format(rec_id))
+                continue
+            cur = con.cursor()
+            cur.execute("UPDATE scores SET latitude = ?, longtitude = ? WHERE id = ?",( lat,long, rec_id))
+        
+            print("        Lat = {:4.2f} Long = {:4.2f}".format(lat,long),flush=True )
+    
+        else:
+            print("         Recording {:6d} is not in the database ".format(rec_id))  
 
 
-
-def score_all_recordings(args):
+def process_all_recordings(args):
     """
     
     Download and score all the audio recordings between the specified dates args.start_date and
@@ -337,8 +413,11 @@ def score_all_recordings(args):
         
         print("  There are {:4d} recordings".format(len(recordings)))
         
-        
-        score_recordings(recordings,args,con,model, client)
+        if  args.pos_only:
+            # Update positions only
+            update_position(recordings,con)
+        else:     
+            score_recordings(recordings,args,con,model, client)
         
         con.commit()
         
@@ -368,7 +447,7 @@ def main():
 
     print("\nStarted: ",datetime.datetime.today().strftime("%d-%h-%Y %H:%M:%S"))
    
-    score_all_recordings(args)
+    process_all_recordings(args)
  
     
     print("\nFinished: ",datetime.datetime.today().strftime("%d-%h-%Y %H:%M:%S"))
