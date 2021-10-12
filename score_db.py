@@ -30,9 +30,9 @@ from private import private_data
 
 DEFAULT_START_DATE = datetime.date(2021,9,17)
 DEFAULT_END_DATE = datetime.datetime.today().date()
-DEFAULT_DB_NAME = "scores.db"
-DEFAULT_LOW_PASS = 4000
-DEFAULT_HIGH_PASS = 2000
+DEFAULT_DB_NAME = "scores_nofilt.db"
+DEFAULT_LOW_PASS = None
+DEFAULT_HIGH_PASS = None
 DEFAULT_NUM_OFFSETS = 3
 DEFAULT_SCORE_THRESHOLD= 0.4
 DEFAULT_TOP_K_CLASS = 3
@@ -108,9 +108,13 @@ def parse_arguments():
     
     parser.add_argument(
         "--pos-only",
-        type=bool,
-        default = False,
-        help="Only update the position (lat/long) for existing records" )                                   
+        action="store_true",
+        help="Only update the position (lat/long) for existing records" ) 
+                                  
+    parser.add_argument(
+        "--ci-only",
+        action="store_true",
+        help="Only update the Cacophony Index for existing records" )                                   
 
     args = parser.parse_args()
     
@@ -193,11 +197,13 @@ def extract_mean_ci_score(rec):
     
     ci = -1.0
     
-    if "analysis" in rec["additionalMetadata"]:
+    try:
         caco_id = rec['additionalMetadata']['analysis']['cacophony_index']
         if len(caco_id) > 1 :
             ci = caco_id[0]['index_percent'] + caco_id[1]['index_percent'] 
             ci = ci/200.0  # convert to fraction and calculate mean
+    except:
+        pass
     
             
     return ci
@@ -310,7 +316,8 @@ def score_recordings(recordings,args,con,model, client):
         else:
             print("       Downloading recording {:6d} ".format(rec['id']))                                                                        
               
-            try:                                                           
+                                                                     
+            try:
                 audio_data = client.download_raw(rec['id'])
                 with io.BytesIO() as f:
                     for chunk in audio_data:
@@ -331,7 +338,7 @@ def score_recordings(recordings,args,con,model, client):
                                                                          
                     insert_scores_into_db(con,scores, ci, rec) 
             except:
-                print("       Failed downloading recording {:6d} ".format(rec['id'])) 
+                print("       Failed downloading recording {:6d}".format(rec['id']),flush=True) 
                 
     
     
@@ -371,6 +378,42 @@ def update_position(recordings, con):
     
         else:
             print("         Recording {:6d} is not in the database ".format(rec_id))  
+
+
+def update_ci_score(recordings, con):
+    """
+
+    Update the cacophony index records in the database ponted to by con
+    based on those in "recordings"
+    
+    Parameters
+    ----------
+
+    recordings : list of dict
+        Audio recording records.
+
+    con : SQLite connection
+        connection to open SQLite database.
+        
+    Returns
+    -------
+    None.
+
+    """
+    
+    for rec in recordings:
+        rec_id = rec['id']
+        print("       Updating recording {:6d} ".format(rec_id))         
+        if recording_in_db(rec_id, con):
+            ci_score = extract_mean_ci_score(rec)
+            cur = con.cursor()
+            cur.execute("UPDATE scores SET ci_score = ? WHERE id = ?",( ci_score, rec_id))
+        
+            print("          CI Score =  {:4.2f}".format(ci_score),flush=True )
+    
+        else:
+            print("         Recording {:6d} is not in the database ".format(rec_id))  
+
 
 
 def process_all_recordings(args):
@@ -416,6 +459,9 @@ def process_all_recordings(args):
         if  args.pos_only:
             # Update positions only
             update_position(recordings,con)
+        elif args.ci_only:
+            # Update cacophony index only
+            update_ci_score(recordings,con)
         else:     
             score_recordings(recordings,args,con,model, client)
         

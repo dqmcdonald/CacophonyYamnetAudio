@@ -4,6 +4,6 @@ korimako_data
 private.py
 TempExperiments.ipynb
 *.txt
-scores.db
 logs
+logs_nofilt
 *.db
