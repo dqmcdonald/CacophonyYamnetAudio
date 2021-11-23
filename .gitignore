@@ -6,4 +6,5 @@ TempExperiments.ipynb
 *.txt
 logs
 logs_nofilt
+*.csv
 *.db
