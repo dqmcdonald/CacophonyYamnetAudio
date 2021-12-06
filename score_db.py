@@ -226,8 +226,8 @@ def get_lat_long(rec):
     """
    
     try:
-        lat = rec["location"]["coordinates"][0]
-        long = rec["location"]["coordinates"][1]
+        lat = rec["location"]["lat"]
+        long = rec["location"]["lng"]
     except KeyError:
         return (None,None)
     
@@ -256,9 +256,8 @@ def insert_scores_into_db(con,scores, ci, rec):
 
     """
     rec_id = rec['id']
-    dev = rec["Device"]
-    dev_id = dev['id']
-    dev_name = dev['devicename']
+    dev_id = rec['deviceId']
+    dev_name = rec['deviceName']
     dt = parsedate(rec["recordingDateTime"])
     dt = dt.astimezone(local_tz)
     (lat,long) = get_lat_long(rec)
@@ -339,7 +338,6 @@ def score_recordings(recordings,args,con,model, client):
                     insert_scores_into_db(con,scores, ci, rec) 
             except:
                 print("       Failed downloading recording {:6d}".format(rec['id']),flush=True) 
-                
     
     
 def update_position(recordings, con):
